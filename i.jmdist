@@ -6,7 +6,7 @@
 # MODULE:      i.jmdist
 # AUTHOR(S):   Dmitry Kolesov (kolesov.dm@gmail.com);
 #
-# PURPOSE:     "The program calculates Jeffries-Matusita Distance"
+# PURPOSE:     The program calculates Jeffries-Matusita Distance between two classes.
 # COPYRIGHT:   (C) 2012, 2013 Dmitry Kolesov / GRASS Development Team
 #
 #              This program is free software under the GNU General Public
@@ -22,7 +22,7 @@
 #% key: base
 #% type: string
 #% gisprompt: base input maps
-#% description: Name of base raster maps
+#% description: Names of base raster maps. The maps contain "spectral" description of the analyzed classes.
 #% required : yes
 #% multiple: yes
 #%end
@@ -30,7 +30,7 @@
 #% key: cover
 #% type: string
 #% gisprompt: cover map
-#% description: Name of cover raster map
+#% description: Raster map that contains ID (categories) of the analyzed classes.
 #% required : yes
 #% multiple: no
 #%end
@@ -38,7 +38,7 @@
 #% key: cats
 #% type: integer
 #% gisprompt: cats of cover map
-#% description: Categories of cover raster map for analize
+#% description: Two categories of cover raster map used to extract analyzed classes.
 #% required : yes
 #% multiple: yes
 #%end
@@ -47,7 +47,6 @@ import os, sys
 from math import exp, sqrt, log
 import numpy as np
 
-
 if "GISBASE" not in os.environ:
     print "You must be in GRASS GIS to run this program."
     sys.exit(1)
@@ -55,40 +54,35 @@ if "GISBASE" not in os.environ:
 import grass.script as grass
 
 
-
 def restoremask(mask):
-    '''восстанавливает слой маски по слою с именем, хранящихся mask'''
-    if mask:
+    if mask != None:
         grass.run_command('g.copy', rast='%s,%s' % (mask, 'MASK'))
 
 def removemask():
-    '''Удаляет слой MASK, если он существует'''
     if grass.find_file('MASK', element = 'cell')['fullname']:
         grass.run_command('g.remove', rast='MASK')
 
 
 def setmask(cover, cat, mask):
-    """Устанавливает слой MASK: нули в тех ячейках, в которых категории карты cover не равны cat. Параметр mask -- изначальный слой маски"""
     removemask()
-    restoremask(mask)
+    restoremask(mask)   # Take into account the mask.
     grass.run_command('r.mask', input=cover, maskcats=cat, flags='o')
-
-
 
 def jm_distance(means, covars):
     """
-    Входы: список из двух векторов средних значений и список из двух ковариационных матриц для первого и второго классов
-    Выход: Расстояния Джеффриса-Мацуситы между этими классами.
+    Get vector of means and covariance matrix of two classes.
+    Return Jeffries-Matusita distance
     """
-    assert len(means) == len(covars) == 2 # расчет расстояний допустим только между двумя классами
-
+    try:
+        assert len(means) == len(covars) == 2
+    except AssertionError:
+        grass.error('Only two categories are applicable.')
 
     m1, m2 = np.array(means)
     s1, s2 = np.array(covars)
 
     dm = (m1-m2)
     s12 = (s1+s2)/2
-
 
     tmp1 = np.core.dot(dm.T, np.linalg.inv((s1+s2)/2) )
     tmp1 = np.core.dot(tmp1, dm)/8
@@ -100,9 +94,8 @@ def jm_distance(means, covars):
 
     return 2*(1- exp(-B))
 
-
 def get_averages(maps):
-    """Вычисляет средние значения ячеек для каждой карты"""
+    """Calculate means of the maps"""
     results = []
     for m in maps:
         univar = {}
@@ -115,15 +108,13 @@ def get_averages(maps):
     return results
 
 def get_covars(maps):
-    """Вычисляет матрицу ковариаций для заданных карт"""
+    """Calculate covariance matrix of the maps"""
     result = []
     p = grass.pipe_command('r.covar',map=maps, flags='q')
     for line in p.stdout:
         result.append([ float(a) for a in line.strip().split()])
     p.wait()
     return result
-
-
 
 def main(options, flags):
     base_maps = options['base'].split(',')
@@ -132,10 +123,9 @@ def main(options, flags):
     try:
         assert len(cats)==2
     except AssertionError:
-        grass.error('Допустимо использовать ровно две категории')
+        grass.error('Only two categories are applicable.')
 
-
-    # Сохраним текущую маску MASK (если она присутствует) во временный файл mask
+    # Save MASK (if present) into temporary file mask
     if grass.find_file('MASK', element = 'cell')['fullname']:
         mask = grass.basename(grass.tempfile())
         grass.run_command('g.copy', rast='%s,%s' % ('MASK', mask))
@@ -149,13 +139,12 @@ def main(options, flags):
         means.append(get_averages(base_maps))
         covars.append(get_covars(base_maps))
 
-    removemask() # удаляем маску, полученную из категорий
-    restoremask(mask) # востанавливаем исходную маску
-    if mask: # удаляем временный файл
+    removemask()
+    restoremask(mask) # Restore initial mask
+    if mask != None:
         grass.run_command('g.remove', rast=mask)
 
     print jm_distance(means, covars)
-
     sys.exit(0)
 
 if __name__ == "__main__":
