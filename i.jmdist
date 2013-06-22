@@ -48,7 +48,7 @@ from math import exp, sqrt, log
 import numpy as np
 
 if "GISBASE" not in os.environ:
-    print "You must be in GRASS GIS to run this program."
+    grass.error("You must be in GRASS GIS to run this program.")
     sys.exit(1)
 
 import grass.script as grass
@@ -83,8 +83,12 @@ def jm_distance(means, covars):
 
     dm = (m1-m2)
     s12 = (s1+s2)/2
-
-    tmp1 = np.core.dot(dm.T, np.linalg.inv((s1+s2)/2) )
+    try:
+        invmatr = np.linalg.inv((s1+s2)/2)
+    except np.linalg.LinAlgError:
+        grass.error("Can't calculate the metric: singular covariance matrix.")
+        sys.exit(1)
+    tmp1 = np.core.dot(dm.T, invmatr)
     tmp1 = np.core.dot(tmp1, dm)/8
 
     tmp2 = np.linalg.det(s12) / sqrt( np.linalg.det(s1)*np.linalg.det(s2) )
