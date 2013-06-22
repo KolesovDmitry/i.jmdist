@@ -54,19 +54,19 @@ if "GISBASE" not in os.environ:
 import grass.script as grass
 
 
-def restoremask(mask):
+def setmask(mask):
     if mask != None:
-        grass.run_command('g.copy', rast='%s,%s' % (mask, 'MASK'))
+        grass.run_command('g.copy', rast='%s,%s' % (mask, 'MASK'), quiet = True)
 
 def removemask():
     if grass.find_file('MASK', element = 'cell')['fullname']:
-        grass.run_command('g.remove', rast='MASK')
+        grass.run_command('g.remove', rast='MASK', quiet = True)
 
 
-def setmask(cover, cat, mask):
+def setmask_by_cat(cover, cat, mask):
     removemask()
-    restoremask(mask)   # Take into account the mask.
-    grass.run_command('r.mask', input=cover, maskcats=cat, flags='o')
+    setmask(mask)   # Take into account the mask.
+    grass.run_command('r.mask', input=cover, maskcats=cat, flags='o', quiet = True)
 
 def jm_distance(means, covars):
     """
@@ -99,18 +99,21 @@ def get_averages(maps):
     results = []
     for m in maps:
         univar = {}
-        p = grass.pipe_command('r.univar',flags='g',map=m)
+        p = grass.pipe_command('r.univar', flags='g', map=m, quiet = True )
         for line in p.stdout:
             val,count = line.strip().split('=')
             univar[val] = float(count)
         p.wait()
+        if univar == {}:
+            grass.error("Map %s is empty" % (m,))
+            sys.exit(1)
         results.append(univar['mean'])
     return results
 
 def get_covars(maps):
     """Calculate covariance matrix of the maps"""
     result = []
-    p = grass.pipe_command('r.covar',map=maps, flags='q')
+    p = grass.pipe_command('r.covar', map=maps, quiet = True)
     for line in p.stdout:
         result.append([ float(a) for a in line.strip().split()])
     p.wait()
@@ -134,15 +137,16 @@ def main(options, flags):
 
     means = []
     covars = []
-    for i in cats:
-        setmask(cover_map, i, mask)
-        means.append(get_averages(base_maps))
-        covars.append(get_covars(base_maps))
-
-    removemask()
-    restoremask(mask) # Restore initial mask
-    if mask != None:
-        grass.run_command('g.remove', rast=mask)
+    try:
+        for i in cats:
+            setmask_by_cat(cover_map, i, mask)
+            means.append(get_averages(base_maps))
+            covars.append(get_covars(base_maps))
+    finally:
+        removemask()
+        setmask(mask) # Restore initial mask
+        if mask != None:
+            grass.run_command('g.remove', rast=mask, quiet = True)
 
     print jm_distance(means, covars)
     sys.exit(0)
