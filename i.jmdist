@@ -96,8 +96,8 @@ def jm_distance(means, covars):
 
     # Bhattacharyya distance (B):
     tmp = np.linalg.det(s12) / sqrt( np.linalg.det(s1)*np.linalg.det(s2) )
-    tmp = log(tmp)/2
-    B = MH + tmp
+    tmp = log(tmp)
+    B = MH/8.0 + tmp/2.0
 
     # J-M distance:
     JM = sqrt(2 * (1 - exp(-B)))
