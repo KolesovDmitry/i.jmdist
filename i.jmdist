@@ -88,15 +88,21 @@ def jm_distance(means, covars):
     except np.linalg.LinAlgError:
         grass.error("Can't calculate the metric: singular covariance matrix.")
         sys.exit(1)
-    tmp1 = np.core.dot(dm.T, invmatr)
-    tmp1 = np.core.dot(tmp1, dm)/8
 
-    tmp2 = np.linalg.det(s12) / sqrt( np.linalg.det(s1)*np.linalg.det(s2) )
-    tmp2 = log(tmp2)/2
+    # Mahalanobis distance (MH):
+    tmp = np.core.dot(dm.T, invmatr)
+    tmp = np.core.dot(tmp, dm)
+    MH = sqrt(tmp)
 
-    B = tmp1 + tmp2
+    # Bhattacharyya distance (B):
+    tmp = np.linalg.det(s12) / sqrt( np.linalg.det(s1)*np.linalg.det(s2) )
+    tmp = log(tmp)/2
+    B = MH + tmp
 
-    return 2*(1- exp(-B))
+    # J-M distance:
+    JM = sqrt(2 * (1 - exp(-B)))
+
+    return JM
 
 def get_averages(maps):
     """Calculate means of the maps"""
